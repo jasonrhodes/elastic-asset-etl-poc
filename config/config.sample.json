@@ -1,0 +1,28 @@
+{
+  "clusters": {
+    "edge": {
+      "node": "https://edge-oblt.es.us-west2.gcp.elastic-cloud.com:443",
+      "auth": {
+        "username": "elastic",
+        "password": "REDACTED"
+      }
+    },
+    "local_es_snapshot_ssl": {
+      "node": "https://locahost:9200",
+      "auth": {
+        "username": "elastic",
+        "password": "changeme"
+      },
+      "tls": {
+        "rejectUnauthorized": false
+      }
+    },
+    "some_cloud_instance": {
+      "node": "https://REDACTED.es.eu-west-1.aws.found.io",
+      "auth": {
+        "username": "REDACTED",
+        "password": "REDACTED"
+      }
+    }
+  }
+}
