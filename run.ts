@@ -1,7 +1,23 @@
 import yargs from "yargs/yargs";
 import { collectServicesFromSummaries } from "./lib/collectServicesFromSummaries";
-import { getEsClient } from "./lib/es_client";
+import { AssetClient, getEsClient } from "./lib/es_client";
 import config from "./config/config.json";
+
+main();
+
+async function etl(esClient: AssetClient) {
+  // Read services from summaries
+  const { services, fullServices } = await collectServicesFromSummaries({ esClient });
+
+  // Convert services to assets
+  // TBA
+
+  // Write service assets to ES using `esClient.writeBatch()` or `esClient.writer.*`
+  // TBA
+
+  console.log(JSON.stringify(services));
+  console.log(JSON.stringify(fullServices));
+}
 
 async function main() {
   const argv = yargs(process.argv.slice(2)).options({
@@ -21,10 +37,9 @@ async function main() {
   const writeConfig = config.clusters[(argv.write || argv.read) as keyof typeof config.clusters];
   
   const esClient = await getEsClient({ readConfig, writeConfig });
-  const { services, fullServices } = await collectServicesFromSummaries({ esClient });
 
-  console.log(JSON.stringify(services));
-  console.log(JSON.stringify(fullServices));
+  await etl(esClient);
+  
+  console.log('Finished running ETL');
 }
 
-main();

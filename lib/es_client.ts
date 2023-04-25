@@ -26,8 +26,8 @@ export class AssetClient {
     return await this.reader.search(req);
   }
 
-  public async write<T>(batch: BulkRequest<T>) {
-    return await this.writer.bulk<T>(batch);
+  public async bulk<T>(req: BulkRequest<T>) {
+    return await this.writer.bulk<T>(req);
   }
 }
 
