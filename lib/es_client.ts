@@ -36,12 +36,6 @@ export async function getEsClient(options: AssetClientOptions) {
     return singletonClient;
   }
 
-  if (!process.env.ES_USERNAME || !process.env.ES_PASSWORD) {
-    throw new Error('Please provide username and password for Elasticsearch via ES_USERNAME and ES_PASSWORD env vars');
-  }
-
-  const tlsRejectUnauthorized = (process.env.ASSETS_READ_ES_TLS_REJECT_UNAUTHORIZED === "false") ? false : true;
-
   singletonClient = new AssetClient(options);
   // await template creation?
 
