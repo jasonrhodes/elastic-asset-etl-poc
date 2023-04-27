@@ -1,22 +1,24 @@
 import yargs from "yargs/yargs";
-import { collectServicesFromSummaries } from "./lib/collectServicesFromSummaries";
+import { collectHosts } from "./lib/collectHostsFromMetrics";
 import { AssetClient, getEsClient } from "./lib/es_client";
+import { HostType, SimpleAsset } from "./types";
 import config from "./config/config.json";
 
 main();
 
 async function etl(esClient: AssetClient) {
-  // Read services from summaries
-  const { services, fullServices } = await collectServicesFromSummaries({ esClient });
+  const hosts = await collectHosts({ esClient: esClient.reader });
 
-  // Convert services to assets
-  // TBA
+  const bulkBody = hosts.flatMap((asset: SimpleAsset<HostType>) => {
+    return [
+      { create: { _index: `assets-${asset['asset.type']}-default` } },
+      asset,
+    ];
+  })
 
-  // Write service assets to ES using `esClient.writeBatch()` or `esClient.writer.*`
-  // TBA
+  const response = await esClient.writer.bulk({ body: bulkBody });
 
-  console.log(JSON.stringify(services));
-  console.log(JSON.stringify(fullServices));
+  console.log(`wrote ${response.items.length} assets; errors ? ${response.errors}`);
 }
 
 async function main() {
