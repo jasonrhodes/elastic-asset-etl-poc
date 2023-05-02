@@ -2,17 +2,16 @@ import { Client } from "@elastic/elasticsearch";
 import { getApmIndices, getLogsIndices, getMetricsIndices } from "../constants";
 import { SimpleAsset } from "../types";
 
-interface CollectPodsAndNodes {
-  pods: SimpleAsset<'k8s.pod'>[];
+interface CollectContainers {
+  containers: SimpleAsset<'container'>[];
 }
 
-export async function collectPods({ esClient }: { esClient: Client }) {
-  // STEP ONE: Query pods that reference their k8s nodes
+export async function collectContainers({ esClient }: { esClient: Client }) {
   const dsl = {
     index: [getLogsIndices(), getApmIndices(), getMetricsIndices()],
     size: 1000,
     collapse: {
-      field: 'kubernetes.pod.uid'
+      field: 'container.id'
     },
     sort: [
       { '_score': 'desc' },
@@ -38,8 +37,9 @@ export async function collectPods({ esClient }: { esClient: Client }) {
           }
         ],
         must: [
+          { exists: { field: 'kubernetes.container.id' } },
           { exists: { field: 'kubernetes.pod.uid' } },
-          { exists: { field: 'kubernetes.node.name' } }
+          { exists: { field: 'host.hostname' } },
         ]
       }
     }
@@ -48,33 +48,28 @@ export async function collectPods({ esClient }: { esClient: Client }) {
   const esResponse = await esClient.search(dsl);
 
   // STEP TWO: Loop over collected pod documents and create a pod asset doc AND a node asset doc for each
-  const docs = esResponse.hits.hits.reduce<CollectPodsAndNodes>((acc, hit) => {
+  const docs = esResponse.hits.hits.reduce<CollectContainers>((acc, hit) => {
     const { fields = {} } = hit;
+    const containerId = fields['container.id'];
     const podUid = fields['kubernetes.pod.uid'];
     const nodeName = fields['kubernetes.node.name'];
-    const clusterName = fields['orchestrator.cluster.name'];
 
-    const pod: SimpleAsset<'k8s.pod'> = {
+    const parentEan = podUid ? `k8s.pod:${podUid}` : fields['host.hostname'];
+
+    const container: SimpleAsset<'container'> = {
       '@timestamp': new Date(),
-      'asset.type': 'k8s.pod',
-      'asset.kind': 'pod',
-      'asset.id': podUid,
-      'asset.ean': `k8s.pod:${podUid}`,
-      'asset.parents': [`k8s.node:${nodeName}`]
+      'asset.type': 'container',
+      'asset.kind': 'container',
+      'asset.id': containerId,
+      'asset.ean': `container:${containerId}`,
+      'asset.parents': parentEan && [parentEan],
     };
 
-    if (fields['cloud.provider']) {
-      pod['cloud.provider'] = fields['cloud.provider'];
-    }
-
-    if (clusterName) {
-      pod['orchestrator.cluster.name'] = clusterName;
-    }
-
-    acc.pods.push(pod);
+    acc.containers.push(container);
 
     return acc;
-  }, { pods: [] });
+  }, { containers: [] });
 
-  return docs.pods;
+  return docs.containers;
 }
+

@@ -1,5 +1,5 @@
 import { Client } from "@elastic/elasticsearch";
-import { getMetricsIndices } from "../constants";
+import { getApmIndices, getLogsIndices, getMetricsIndices } from "../constants";
 import { SimpleAsset, HostType } from "../types";
 
 interface CollectHosts {
@@ -8,22 +8,21 @@ interface CollectHosts {
 
 export async function collectHosts({ esClient }: { esClient: Client }): Promise<SimpleAsset<HostType>[]> {
   const dsl = {
-    index: [getMetricsIndices()],
+    index: [getMetricsIndices(), getLogsIndices(), getApmIndices()],
     size: 1000,
-    collapse: {
-      field: 'host.hostname'
-    },
+    collapse: { field: 'host.hostname' },
     sort: [
-      {
-        "@timestamp": "desc"
-      }
+      { "_score": "desc" },
+      { "@timestamp": "desc" }
     ],
     _source: false,
     fields: [
-      'kubernetes.*',
+      '@timestamp',
       'cloud.*',
+      'container.*',
+      'host.hostname',
+      'kubernetes.*',
       'orchestrator.cluster.name',
-      'host.hostname'
     ],
     query: {
       bool: {
@@ -37,31 +36,35 @@ export async function collectHosts({ esClient }: { esClient: Client }): Promise<
           }
         ],
         must: [
-          {
-            exists: {
-              field: 'host.hostname'
-            }
-          },
+          { exists: { field: 'host.hostname' } },
+        ],
+        should: [
+          { exists: { field: 'kubernetes.node.name' } },
+          { exists: { field: 'kubernetes.pod.uid' } },
+          { exists: { field: 'container.id' } }
         ]
       }
     }
   };
 
-  console.log(JSON.stringify(dsl));
   const esResponse = await esClient.search(dsl);
 
+  // STEP TWO: Loop over collected pod documents and create a pod asset doc AND a node asset doc for each
   const assets = esResponse.hits.hits.reduce<CollectHosts>((acc, hit) => {
     const { fields = {} } = hit;
     const hostName = fields['host.hostname'];
-    const hostType: HostType = getHostType(fields);
+    const k8sNode = fields['kubernetes.node.name'];
+    const k8sPod = fields['kubernetes.pod.uid'];
+
+    const hostEan = `${k8sNode ? 'k8s.node:' + k8sNode : 'host:' + hostName}`;
 
     const host: SimpleAsset<HostType> = {
       '@timestamp': new Date(),
-      'asset.type': hostType,
+      'asset.type': k8sNode ? 'k8s.node' : 'host',
       'asset.kind': 'host',
-      'asset.id': hostName,
-      'asset.name': hostName,
-      'asset.ean': `${hostType}:${hostName}`,
+      'asset.id': k8sNode || hostName,
+      'asset.name': k8sNode || hostName,
+      'asset.ean': hostEan,
     };
 
     if (fields['cloud.provider']) {
@@ -82,6 +85,10 @@ export async function collectHosts({ esClient }: { esClient: Client }): Promise<
 
     if (fields['orchestrator.cluster.name']) {
       host['orchestrator.cluster.name'] = fields['orchestrator.cluster.name'];
+    }
+
+    if (k8sPod) {
+      host['asset.children'] = [`k8s.pod:${k8sPod}`];
     }
 
     acc.hosts.push(host);

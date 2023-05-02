@@ -14,6 +14,7 @@ export interface SimpleAsset<T> {
   'cloud.instance.id'?: string;
   'orchestrator.cluster.name'?: string;
   'service.environment'?: string;
+  'kubernetes.node.hostname'?: string;
 }
 
 export type HostType = 'host' | 'aws.ec2' | 'k8s.node' | 'gcp.gce';

@@ -1,174 +1,115 @@
 import { Client } from "@elastic/elasticsearch";
-import { getApmIndices, getLogsIndices } from "../constants";
+import { getApmIndices, getLogsIndices, getMetricsIndices } from "../constants";
 import { SimpleAsset } from "../types";
 
 interface CollectServices {
   services: SimpleAsset<'service'>[];
-  containers: SimpleAsset<'container'>[];
 }
 
-export async function collectServices({ esClient }: { esClient: Client }) {
+const MISSING_KEY = "__unknown__";
+
+/**
+ * service.name|service.environment
+ * -> containers|hostname
+ */
+
+export async function collectServices({ esClient }: { esClient: Client }): Promise<SimpleAsset<'service' | 'container'>[]> {
   // STEP ONE: Query pods that reference their k8s nodes
   const dsl = {
-    index: [getApmIndices()],
-    size: 1000,
-    collapse: {
-      field: 'service.name'
-    },
-    sort: [
+    index: [getApmIndices(), getLogsIndices(), getMetricsIndices()].concat(','),
+    "size": 0,
+    "sort": [
       {
-        "@timestamp": "desc" // TODO: Switch to ASC with a hard-coded "one hour ago" value, then use "search_after" to process all results?
+        "@timestamp": "desc"
       }
     ],
-    _source: false,
-    fields: [
-      'service.name',
-      'service.environment',
-      'container.*',
-      'kubernetes.pod.uid',
-      'kubneretes.pod.name',
-      'kubernetes.node.id',
-      'kubernetes.node.name',
-      'kubernetes.namespace',
-      'cloud.provider',
-      'orchestrator.cluster.name',
-      'host.name',
-      'host.hostname'
-    ],
-    query: {
-      bool: {
-        filter: [
+    "_source": false,
+    "query": {
+      "bool": {
+        "filter": [
           {
-            range: {
-              '@timestamp': {
-                gte: 'now-1h'
+            "range": {
+              "@timestamp": {
+                "gte": "now-1h"
               }
             }
           }
         ],
-        must: [
+        "must": [
           {
-            exists: {
-              field: 'service.name'
+            "exists": {
+              "field": "service.name"
             }
           }
-        ],
-        should: [
-          {
-            exists: {
-              field: 'container.id'
+        ]
+      }
+    },
+    "aggs": {
+      "service_environment": {
+        "multi_terms": {
+          "size": 100,
+          "terms": [
+            {
+              "field": "service.name"
+            },
+            {
+              "field": "service.environment",
+              "missing": MISSING_KEY
             }
-          },
-          {
-            exists: {
-              field: 'kubernetes.pod.uid'
-            }
-          },
-          {
-            exists: {
-              field: 'host.name'
-            }
-          },
-          {
-            exists: {
-              field: 'host.hostname'
+          ]
+        },
+        "aggs": {
+          "container_host": {
+            "multi_terms": {
+              "size": 100,
+              "terms": [
+                { "field": "container.id", "missing": MISSING_KEY },
+                { "field": "host.hostname", "missing": MISSING_KEY }
+              ]
             }
           }
-        ],
-        minimum_should_match: 1
+        }
       }
     }
   };
 
-  console.log(JSON.stringify(dsl));
+
   const esResponse = await esClient.search(dsl);
+  const serviceEnvironment = esResponse.aggregations?.service_environment as { buckets: any[] };
 
-  const docs = esResponse.hits.hits.reduce<CollectServices>((acc, hit) => {
-    const { fields = {} } = hit;
-    const serviceName = fields['service.name'];
-    const serviceEnvironment = fields['service.environment'];
-    const containerId = fields['container.id'];
-    const podUid = fields['kubernetes.pod.uid'];
-    const nodeName = fields['kubernetes.node.name'];
+  const docs = serviceEnvironment.buckets.reduce<CollectServices>((acc: any, hit: any) => {
+    const [serviceName, environment] = hit.key;
+    const containerHosts = hit.container_host.buckets;
 
-    const serviceEan = `service:${serviceName}`;
-    const containerEan = containerId ? `container:${containerId}` : null;
-    const podEan = podUid ? `k8s.pod:${podUid}` : null;
-    const nodeEan = nodeName ? `k8s.node:${nodeName}` : null;
     const service: SimpleAsset<'service'> = {
       '@timestamp': new Date(),
       'asset.type': 'service',
+      'asset.kind': 'service',
       'asset.id': serviceName,
-      'asset.ean': serviceEan,
+      'asset.ean': `service:${serviceName}`,
       'asset.references': [],
-      'service.environment': serviceEnvironment // TODO: Should this be part of the service's ID/EAN?
+      'asset.parents': [],
     };
 
-    if (containerEan) {
-      service['asset.parents'] = [containerEan];
+    if (environment != MISSING_KEY) {
+      service['service.environment'] = environment;
     }
 
-    if (fields['cloud.provider']) {
-      service['cloud.provider'] = fields['cloud.provider'];
-    }
+    containerHosts.forEach((hit: any) => {
+      const [containerId, hostname] = hit.key;
+      if (containerId !== MISSING_KEY) {
+        service['asset.parents']?.push(`container:${containerId}`);
+      }
 
-    if (podEan) {
-      service['asset.references']?.push(podEan);
-    }
-
-    if (nodeEan) {
-      service['asset.references']?.push(nodeEan);
-    }
+      if (hostname !== MISSING_KEY) {
+        service['asset.references']?.push(`host:${hostname}`);
+      }
+    });
 
     acc.services.push(service);
 
-    if (!containerEan) {
-      return acc;
-    }
-
-    const foundContainer = acc.containers.find((collectedContainer) => collectedContainer['asset.ean'] === containerEan);
-
-    if (foundContainer) {
-      if (foundContainer['asset.children']) {
-        foundContainer['asset.children'].push(serviceEan);
-      } else {
-        foundContainer['asset.children'] = [serviceEan];
-      }
-
-      if (podEan) {
-        if (foundContainer['asset.parents']) {
-          foundContainer['asset.parents'].push(podEan);
-        } else {
-          foundContainer['asset.parents'] = [podEan];
-        }
-      }
-
-      if (nodeEan) {
-        foundContainer['asset.references']?.push(nodeEan);
-      }
-    } else {
-      const container: SimpleAsset<'container'> = {
-        '@timestamp': new Date(),
-        'asset.type': 'container',
-        'asset.id': containerId,
-        'asset.ean': containerEan,
-        'asset.references': [],
-        'asset.children': [serviceEan]
-      };
-
-      if (podEan) {
-        container['asset.parents'] = [podEan];
-      }
-
-      if (nodeEan) {
-        container['asset.references']?.push(nodeEan);
-      }
-
-      acc.containers.push(container);
-    }
-
     return acc;
-  }, { services: [], containers: [] });
+  }, { services: [] });
 
-  return { esResponse, docs };
+  return [...docs.services];
 }
