@@ -4,6 +4,7 @@ export const assetsIndexTemplateConfig: IndicesPutIndexTemplateRequest = {
   name: 'assets',
   index_patterns: ['assets*'],
   priority: 100,
+  data_stream: {},
   template: {
     settings: {},
     mappings: {

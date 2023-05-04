@@ -1,22 +1,41 @@
 import yargs from "yargs/yargs";
-import { collectServicesFromSummaries } from "./lib/collectServicesFromSummaries";
+import { collectHosts } from "./lib/collectHosts";
+import { collectServices } from "./lib/collectServices";
+import { collectPods } from "./lib/collectPods";
+import { collectContainers } from "./lib/collectContainers";
 import { AssetClient, getEsClient } from "./lib/es_client";
+import { SimpleAsset } from "./types";
 import config from "./config/config.json";
 
 main();
 
+const assetToBulkOperation = (asset: SimpleAsset) => {
+  return [
+    { create: { _index: `assets-${asset['asset.kind']}-default` } },
+    asset,
+  ];
+};
+
 async function etl(esClient: AssetClient) {
-  // Read services from summaries
-  const { services, fullServices } = await collectServicesFromSummaries({ esClient });
+  await collectHosts({ esClient: esClient.reader })
+    .then(assets => assets.flatMap(assetToBulkOperation))
+    .then(bulkBody => esClient.writer.bulk({ body: bulkBody }))
+    .then(response => console.log(`wrote ${response.items.length} hosts; errors ? ${response.errors}`));
 
-  // Convert services to assets
-  // TBA
+  await collectPods({ esClient: esClient.reader })
+    .then(assets => assets.flatMap(assetToBulkOperation))
+    .then(bulkBody => esClient.writer.bulk({ body: bulkBody }))
+    .then(response => console.log(`wrote ${response.items.length} pods; errors ? ${response.errors}`));
 
-  // Write service assets to ES using `esClient.writeBatch()` or `esClient.writer.*`
-  // TBA
+  await collectContainers({ esClient: esClient.reader })
+    .then(assets => assets.flatMap(assetToBulkOperation))
+    .then(bulkBody => esClient.writer.bulk({ body: bulkBody }))
+    .then(response => console.log(`wrote ${response.items.length} containers; errors ? ${response.errors}`));
 
-  console.log(JSON.stringify(services));
-  console.log(JSON.stringify(fullServices));
+  await collectServices({ esClient: esClient.reader })
+    .then(assets => assets.flatMap(assetToBulkOperation))
+    .then(bulkBody => esClient.writer.bulk({ body: bulkBody }))
+    .then(response => console.log(`wrote ${response.items.length} services; errors ? ${response.errors}`));
 }
 
 async function main() {

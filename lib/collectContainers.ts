@@ -2,18 +2,19 @@ import { Client } from "@elastic/elasticsearch";
 import { getApmIndices, getLogsIndices, getMetricsIndices } from "../constants";
 import { SimpleAsset } from "../types";
 
-interface CollectPods {
-  pods: SimpleAsset[];
+interface CollectContainers {
+  containers: SimpleAsset[];
 }
 
-export async function collectPods({ esClient }: { esClient: Client }) {
+export async function collectContainers({ esClient }: { esClient: Client }) {
   const dsl = {
     index: [getLogsIndices(), getApmIndices(), getMetricsIndices()],
     size: 1000,
     collapse: {
-      field: 'kubernetes.pod.uid'
+      field: 'container.id'
     },
     sort: [
+      { '_score': 'desc' },
       { '@timestamp': 'desc' }
     ],
     _source: false,
@@ -35,9 +36,10 @@ export async function collectPods({ esClient }: { esClient: Client }) {
             }
           }
         ],
-        must: [
+        should: [
+          { exists: { field: 'kubernetes.container.id' } },
           { exists: { field: 'kubernetes.pod.uid' } },
-          { exists: { field: 'kubernetes.node.name' } }
+          { exists: { field: 'host.hostname' } },
         ]
       }
     }
@@ -45,32 +47,27 @@ export async function collectPods({ esClient }: { esClient: Client }) {
 
   const esResponse = await esClient.search(dsl);
 
-  const docs = esResponse.hits.hits.reduce<CollectPods>((acc, hit) => {
+  const docs = esResponse.hits.hits.reduce<CollectContainers>((acc, hit) => {
     const { fields = {} } = hit;
+    const containerId = fields['container.id'];
     const podUid = fields['kubernetes.pod.uid'];
     const nodeName = fields['kubernetes.node.name'];
-    const clusterName = fields['orchestrator.cluster.name'];
 
-    const pod: SimpleAsset = {
+    const parentEan = podUid ? `pod:${podUid}` : `host:${fields['host.hostname']}`;
+
+    const container: SimpleAsset = {
       '@timestamp': new Date(),
-      'asset.kind': 'pod',
-      'asset.id': podUid,
-      'asset.ean': `pod:${podUid}`,
-      'asset.parents': [`host:${nodeName}`]
+      'asset.kind': 'container',
+      'asset.id': containerId,
+      'asset.ean': `container:${containerId}`,
+      'asset.parents': [parentEan],
     };
 
-    if (fields['cloud.provider']) {
-      pod['cloud.provider'] = fields['cloud.provider'];
-    }
-
-    if (clusterName) {
-      pod['orchestrator.cluster.name'] = clusterName;
-    }
-
-    acc.pods.push(pod);
+    acc.containers.push(container);
 
     return acc;
-  }, { pods: [] });
+  }, { containers: [] });
 
-  return docs.pods;
+  return docs.containers;
 }
+
