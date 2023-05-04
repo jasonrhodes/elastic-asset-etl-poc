@@ -1,7 +1,6 @@
-export interface SimpleAsset<T> {
+export interface SimpleAsset {
   '@timestamp': Date;
   'asset.ean': string;
-  'asset.type': T;
   'asset.id': string;
   'asset.kind': string;
   'asset.name'?: string;
@@ -17,4 +16,3 @@ export interface SimpleAsset<T> {
   'kubernetes.node.hostname'?: string;
 }
 
-export type HostType = 'host' | 'aws.ec2' | 'k8s.node' | 'gcp.gce';

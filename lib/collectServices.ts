@@ -3,12 +3,12 @@ import { getApmIndices, getLogsIndices, getMetricsIndices } from "../constants";
 import { SimpleAsset } from "../types";
 
 interface CollectServices {
-  services: SimpleAsset<'service'>[];
+  services: SimpleAsset[];
 }
 
 const MISSING_KEY = "__unknown__";
 
-export async function collectServices({ esClient }: { esClient: Client }): Promise<SimpleAsset<'service' | 'container'>[]> {
+export async function collectServices({ esClient }: { esClient: Client }): Promise<SimpleAsset[]> {
   const dsl = {
     index: getApmIndices(),
     "size": 0,
@@ -75,9 +75,8 @@ export async function collectServices({ esClient }: { esClient: Client }): Promi
     const [serviceName, environment] = hit.key;
     const containerHosts = hit.container_host.buckets;
 
-    const service: SimpleAsset<'service'> = {
+    const service: SimpleAsset = {
       '@timestamp': new Date(),
-      'asset.type': 'service',
       'asset.kind': 'service',
       'asset.id': serviceName,
       'asset.ean': `service:${serviceName}`,

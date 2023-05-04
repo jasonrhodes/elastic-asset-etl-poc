@@ -2,8 +2,8 @@ import { Client } from "@elastic/elasticsearch";
 import { getApmIndices, getLogsIndices, getMetricsIndices } from "../constants";
 import { SimpleAsset } from "../types";
 
-interface CollectPodsAndNodes {
-  pods: SimpleAsset<'k8s.pod'>[];
+interface CollectPods {
+  pods: SimpleAsset[];
 }
 
 export async function collectPods({ esClient }: { esClient: Client }) {
@@ -45,19 +45,18 @@ export async function collectPods({ esClient }: { esClient: Client }) {
 
   const esResponse = await esClient.search(dsl);
 
-  const docs = esResponse.hits.hits.reduce<CollectPodsAndNodes>((acc, hit) => {
+  const docs = esResponse.hits.hits.reduce<CollectPods>((acc, hit) => {
     const { fields = {} } = hit;
     const podUid = fields['kubernetes.pod.uid'];
     const nodeName = fields['kubernetes.node.name'];
     const clusterName = fields['orchestrator.cluster.name'];
 
-    const pod: SimpleAsset<'k8s.pod'> = {
+    const pod: SimpleAsset = {
       '@timestamp': new Date(),
-      'asset.type': 'k8s.pod',
       'asset.kind': 'pod',
       'asset.id': podUid,
-      'asset.ean': `k8s.pod:${podUid}`,
-      'asset.parents': [`k8s.node:${nodeName}`]
+      'asset.ean': `pod:${podUid}`,
+      'asset.parents': [`host:${nodeName}`]
     };
 
     if (fields['cloud.provider']) {

@@ -4,14 +4,14 @@ import { collectServices } from "./lib/collectServices";
 import { collectPods } from "./lib/collectPods";
 import { collectContainers } from "./lib/collectContainers";
 import { AssetClient, getEsClient } from "./lib/es_client";
-import { HostType, SimpleAsset } from "./types";
+import { SimpleAsset } from "./types";
 import config from "./config/config.json";
 
 main();
 
-const assetToBulkOperation = (asset: SimpleAsset<HostType | 'service' | 'container' | 'k8s.pod'>) => {
+const assetToBulkOperation = (asset: SimpleAsset) => {
   return [
-    { create: { _index: `assets-${asset['asset.type']}-default` } },
+    { create: { _index: `assets-${asset['asset.kind']}-default` } },
     asset,
   ];
 };

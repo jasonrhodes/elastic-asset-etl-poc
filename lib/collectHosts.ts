@@ -1,12 +1,12 @@
 import { Client } from "@elastic/elasticsearch";
 import { getApmIndices, getLogsIndices, getMetricsIndices } from "../constants";
-import { SimpleAsset, HostType } from "../types";
+import { SimpleAsset } from "../types";
 
 interface CollectHosts {
-  hosts: SimpleAsset<HostType>[];
+  hosts: SimpleAsset[];
 }
 
-export async function collectHosts({ esClient }: { esClient: Client }): Promise<SimpleAsset<HostType>[]> {
+export async function collectHosts({ esClient }: { esClient: Client }): Promise<SimpleAsset[]> {
   const dsl = {
     index: [getMetricsIndices(), getLogsIndices(), getApmIndices()],
     size: 1000,
@@ -55,11 +55,10 @@ export async function collectHosts({ esClient }: { esClient: Client }): Promise<
     const k8sNode = fields['kubernetes.node.name'];
     const k8sPod = fields['kubernetes.pod.uid'];
 
-    const hostEan = `${k8sNode ? 'k8s.node:' + k8sNode : 'host:' + hostName}`;
+    const hostEan = `host:${k8sNode || hostName}`;
 
-    const host: SimpleAsset<HostType> = {
+    const host: SimpleAsset = {
       '@timestamp': new Date(),
-      'asset.type': k8sNode ? 'k8s.node' : 'host',
       'asset.kind': 'host',
       'asset.id': k8sNode || hostName,
       'asset.name': k8sNode || hostName,
@@ -87,7 +86,7 @@ export async function collectHosts({ esClient }: { esClient: Client }): Promise<
     }
 
     if (k8sPod) {
-      host['asset.children'] = [`k8s.pod:${k8sPod}`];
+      host['asset.children'] = [`pod:${k8sPod}`];
     }
 
     acc.hosts.push(host);

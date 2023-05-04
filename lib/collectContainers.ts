@@ -3,7 +3,7 @@ import { getApmIndices, getLogsIndices, getMetricsIndices } from "../constants";
 import { SimpleAsset } from "../types";
 
 interface CollectContainers {
-  containers: SimpleAsset<'container'>[];
+  containers: SimpleAsset[];
 }
 
 export async function collectContainers({ esClient }: { esClient: Client }) {
@@ -53,15 +53,14 @@ export async function collectContainers({ esClient }: { esClient: Client }) {
     const podUid = fields['kubernetes.pod.uid'];
     const nodeName = fields['kubernetes.node.name'];
 
-    const parentEan = podUid ? `k8s.pod:${podUid}` : fields['host.hostname'];
+    const parentEan = podUid ? `pod:${podUid}` : `host:${fields['host.hostname']}`;
 
-    const container: SimpleAsset<'container'> = {
+    const container: SimpleAsset = {
       '@timestamp': new Date(),
-      'asset.type': 'container',
       'asset.kind': 'container',
       'asset.id': containerId,
       'asset.ean': `container:${containerId}`,
-      'asset.parents': parentEan && [parentEan],
+      'asset.parents': [parentEan],
     };
 
     acc.containers.push(container);
