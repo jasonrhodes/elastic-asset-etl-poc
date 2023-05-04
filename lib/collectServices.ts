@@ -8,15 +8,9 @@ interface CollectServices {
 
 const MISSING_KEY = "__unknown__";
 
-/**
- * service.name|service.environment
- * -> containers|hostname
- */
-
 export async function collectServices({ esClient }: { esClient: Client }): Promise<SimpleAsset<'service' | 'container'>[]> {
-  // STEP ONE: Query pods that reference their k8s nodes
   const dsl = {
-    index: [getApmIndices(), getLogsIndices(), getMetricsIndices()].concat(','),
+    index: getApmIndices(),
     "size": 0,
     "sort": [
       {

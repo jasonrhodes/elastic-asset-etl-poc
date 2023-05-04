@@ -36,7 +36,7 @@ export async function collectContainers({ esClient }: { esClient: Client }) {
             }
           }
         ],
-        must: [
+        should: [
           { exists: { field: 'kubernetes.container.id' } },
           { exists: { field: 'kubernetes.pod.uid' } },
           { exists: { field: 'host.hostname' } },
@@ -47,7 +47,6 @@ export async function collectContainers({ esClient }: { esClient: Client }) {
 
   const esResponse = await esClient.search(dsl);
 
-  // STEP TWO: Loop over collected pod documents and create a pod asset doc AND a node asset doc for each
   const docs = esResponse.hits.hits.reduce<CollectContainers>((acc, hit) => {
     const { fields = {} } = hit;
     const containerId = fields['container.id'];

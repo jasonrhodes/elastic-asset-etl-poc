@@ -1,5 +1,5 @@
 export const LOGS_INDICES = 'logs-*,filebeat-*';
-export const APM_INDICES = 'traces-*,apm*,metrics-apm*';
+export const APM_INDICES = 'traces-*,apm*,metrics-apm*,logs-apm*';
 export const METRICS_INDICES = 'metrics-*,metricbeat-*';
 
 export const REMOTE_LOGS_INDICES = 'remote_cluster:logs-*,remote_cluster:filebeat-*';

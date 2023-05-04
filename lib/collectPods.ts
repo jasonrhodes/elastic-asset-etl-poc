@@ -7,7 +7,6 @@ interface CollectPodsAndNodes {
 }
 
 export async function collectPods({ esClient }: { esClient: Client }) {
-  // STEP ONE: Query pods that reference their k8s nodes
   const dsl = {
     index: [getLogsIndices(), getApmIndices(), getMetricsIndices()],
     size: 1000,
@@ -15,7 +14,6 @@ export async function collectPods({ esClient }: { esClient: Client }) {
       field: 'kubernetes.pod.uid'
     },
     sort: [
-      { '_score': 'desc' },
       { '@timestamp': 'desc' }
     ],
     _source: false,
@@ -47,7 +45,6 @@ export async function collectPods({ esClient }: { esClient: Client }) {
 
   const esResponse = await esClient.search(dsl);
 
-  // STEP TWO: Loop over collected pod documents and create a pod asset doc AND a node asset doc for each
   const docs = esResponse.hits.hits.reduce<CollectPodsAndNodes>((acc, hit) => {
     const { fields = {} } = hit;
     const podUid = fields['kubernetes.pod.uid'];

@@ -49,7 +49,6 @@ export async function collectHosts({ esClient }: { esClient: Client }): Promise<
 
   const esResponse = await esClient.search(dsl);
 
-  // STEP TWO: Loop over collected pod documents and create a pod asset doc AND a node asset doc for each
   const assets = esResponse.hits.hits.reduce<CollectHosts>((acc, hit) => {
     const { fields = {} } = hit;
     const hostName = fields['host.hostname'];
@@ -98,11 +97,3 @@ export async function collectHosts({ esClient }: { esClient: Client }): Promise<
 
   return assets.hosts;
 }
-
-function getHostType(fields: any): HostType {
-  if (fields['cloud.provider'] && fields['cloud.service.name']) {
-    return `${fields['cloud.provider']}.${fields['cloud.service.name']}`.toLowerCase() as HostType;
-  }
-
-  return 'host';
-};

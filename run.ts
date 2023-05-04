@@ -1,11 +1,11 @@
 import yargs from "yargs/yargs";
-import { collectHosts } from "./lib/collectHostsFromMetrics";
+import { collectHosts } from "./lib/collectHosts";
 import { collectServices } from "./lib/collectServices";
+import { collectPods } from "./lib/collectPods";
+import { collectContainers } from "./lib/collectContainers";
 import { AssetClient, getEsClient } from "./lib/es_client";
 import { HostType, SimpleAsset } from "./types";
 import config from "./config/config.json";
-import { collectPods } from "./lib/collectPods";
-import { collectContainers } from "./lib/collectContainers";
 
 main();
 
